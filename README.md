@@ -30,5 +30,5 @@ This project helps customers with product info, order tracking, warranty checks,
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/singer-ecommerce-chatbot.git
-cd singer-ecommerce-chatbot
+git clone 
+cd 
