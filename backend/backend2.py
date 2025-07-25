@@ -4,7 +4,7 @@ import uuid
 from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import openai
 import pyodbc
 from langgraph.graph import StateGraph, END
@@ -30,188 +30,231 @@ conn_str = (
 
 app = FastAPI()
 
-# In-memory session store (for demo; use Redis or DB for production)
+# In-memory session store
 session_store = {}
 
-# --- State Schema ---
+# --- State Schema using Pydantic BaseModel ---
 class ChatState(BaseModel):
     session_id: str
     user_message: str
-    response: Optional[str] = None  # Changed to Optional[str]
-    intent: Optional[str] = None    # Changed to Optional[str]
-    user_id: Optional[str] = None   # Changed to Optional[str]
+    response: str = ""  # Default to empty string
+    intent: str = ""    # Default to empty string
+    user_id: str = ""   # Default to empty string
 
 # --- LangGraph Nodes ---
-def intent_node(state: ChatState):
-    print(f"[LangGraph] Entering intent_node with user_message: {state.user_message}")
+def intent_node(state: ChatState) -> ChatState:
+    print(f"[LangGraph] Entering intent_node with user_message: '{state.user_message}'")
     user_message = state.user_message.strip().lower()
+    print(f"[LangGraph] Processed message: '{user_message}'")
     
     # Check for greeting
     if user_message in ["hi", "hello", "hey"]:
-        return {"session_id": state.session_id, "user_message": state.user_message, "intent": "greeting", "user_id": state.user_id, "response": state.response}
+        print("[LangGraph] Detected greeting")
+        return ChatState(
+            session_id=state.session_id,
+            user_message=state.user_message,
+            intent="greeting",
+            user_id=state.user_id,
+            response=state.response
+        )
     
     # Check for user ID
     match = re.match(r'usr\d+', user_message, re.IGNORECASE)
     if match:
-        return {"session_id": state.session_id, "user_message": state.user_message, "intent": "user_id", "user_id": match.group().upper(), "response": state.response}
+        print("[LangGraph] Detected user ID")
+        return ChatState(
+            session_id=state.session_id,
+            user_message=state.user_message,
+            intent="user_id",
+            user_id=match.group().upper(),
+            response=state.response
+        )
     
-    # Otherwise, use LLM for intent detection
-    prompt = f"""Classify the user's intent from this message: "{state.user_message}"
-Options: order_query, spare_part_query, general
-Respond with only the intent keyword."""
+    # Check for order-related keywords
+    if any(word in user_message for word in ["order", "orders", "delivery", "status"]):
+        print("[LangGraph] Detected order query")
+        return ChatState(
+            session_id=state.session_id,
+            user_message=state.user_message,
+            intent="order_query",
+            user_id=state.user_id,
+            response=state.response
+        )
     
-    response = openai.chat.completions.create(
-        model=openai_deployment,
-        messages=[{"role": "user", "content": prompt}]
+    # Check for spare parts query
+    if any(word in user_message for word in ["spare", "part", "parts"]) or re.search(r'prd\d+', user_message, re.IGNORECASE):
+        print("[LangGraph] Detected spare part query")
+        return ChatState(
+            session_id=state.session_id,
+            user_message=state.user_message,
+            intent="spare_part_query",
+            user_id=state.user_id,
+            response=state.response
+        )
+    
+    # Default to general
+    print("[LangGraph] Detected general intent")
+    return ChatState(
+        session_id=state.session_id,
+        user_message=state.user_message,
+        intent="general",
+        user_id=state.user_id,
+        response=state.response
     )
-    intent = response.choices[0].message.content.strip()
-    print(f"[LangGraph] Detected intent: {intent}")
-    return {"session_id": state.session_id, "user_message": state.user_message, "intent": intent, "user_id": state.user_id, "response": state.response}
 
-def greeting_node(state: ChatState):
+def greeting_node(state: ChatState) -> ChatState:
     print("[LangGraph] Entering greeting_node")
-    return {
-        "session_id": state.session_id, 
-        "response": "Hello! Please provide your user ID (e.g., USR001) to continue.", 
-        "user_id": state.user_id,
-        "intent": state.intent,
-        "user_message": state.user_message
-    }
+    return ChatState(
+        session_id=state.session_id,
+        user_message=state.user_message,
+        intent=state.intent,
+        user_id=state.user_id,
+        response="Hello! Please provide your user ID (e.g., USR001) to continue."
+    )
 
-def user_id_node(state: ChatState):
+def user_id_node(state: ChatState) -> ChatState:
     print(f"[LangGraph] Entering user_id_node with user_id: {state.user_message.upper()}")
     user_id = state.user_message.upper()
     # Save user_id in session store
     session_store[state.session_id] = user_id
-    return {
-        "session_id": state.session_id, 
-        "response": f"Thank you! Your user ID {user_id} has been saved. How can I assist you today?", 
-        "user_id": user_id,
-        "intent": state.intent,
-        "user_message": state.user_message
-    }
+    return ChatState(
+        session_id=state.session_id,
+        user_message=state.user_message,
+        intent=state.intent,
+        user_id=user_id,
+        response=f"Thank you! Your user ID {user_id} has been saved. How can I assist you today?"
+    )
 
-def db_node(state: ChatState):
+def db_node(state: ChatState) -> ChatState:
     print(f"[LangGraph] Entering db_node with intent: {state.intent}, user_id: {state.user_id}, user_message: {state.user_message}")
     intent = state.intent
     user_message = state.user_message
-    user_id = state.user_id or session_store.get(state.session_id)
+    user_id = state.user_id or session_store.get(state.session_id, "")
     
     try:
-        conn = pyodbc.connect(conn_str)
-        cursor = conn.cursor()
-        
         if intent == "order_query":
             if user_id:
+                conn = pyodbc.connect(conn_str)
+                cursor = conn.cursor()
                 cursor.execute("SELECT OrderID, Status, DeliveryDate FROM Orders WHERE UserID = ?", user_id)
                 orders = cursor.fetchall()
                 conn.close()
                 
                 if not orders:
                     print("[LangGraph] No orders found for user.")
-                    return {
-                        "session_id": state.session_id, 
-                        "response": "No orders found for your account.", 
-                        "user_id": user_id,
-                        "intent": state.intent,
-                        "user_message": state.user_message
-                    }
+                    return ChatState(
+                        session_id=state.session_id,
+                        user_message=state.user_message,
+                        intent=state.intent,
+                        user_id=user_id,
+                        response="No orders found for your account."
+                    )
                 
                 result = "\n".join([f"Order {o.OrderID}: {o.Status}, Delivery: {o.DeliveryDate}" for o in orders])
                 print(f"[LangGraph] Orders found: {result}")
-                return {
-                    "session_id": state.session_id, 
-                    "response": result, 
-                    "user_id": user_id,
-                    "intent": state.intent,
-                    "user_message": state.user_message
-                }
+                return ChatState(
+                    session_id=state.session_id,
+                    user_message=state.user_message,
+                    intent=state.intent,
+                    user_id=user_id,
+                    response=result
+                )
             else:
-                conn.close()
                 print("[LangGraph] No user ID found in session.")
-                return {
-                    "session_id": state.session_id, 
-                    "response": "Please provide your user ID (e.g., USR001).", 
-                    "user_id": user_id,
-                    "intent": state.intent,
-                    "user_message": state.user_message
-                }
+                return ChatState(
+                    session_id=state.session_id,
+                    user_message=state.user_message,
+                    intent=state.intent,
+                    user_id=user_id,
+                    response="Please provide your user ID (e.g., USR001) first."
+                )
                 
         elif intent == "spare_part_query":
             match = re.search(r'PRD\d+', user_message, re.IGNORECASE)
             if match:
                 product_id = match.group().upper()
+                conn = pyodbc.connect(conn_str)
+                cursor = conn.cursor()
                 cursor.execute("SELECT PartName, Stock, Price FROM SpareParts WHERE ProductID = ?", product_id)
                 parts = cursor.fetchall()
                 conn.close()
                 
                 if not parts:
                     print("[LangGraph] No spare parts found for product.")
-                    return {
-                        "session_id": state.session_id, 
-                        "response": "No spare parts found for this product.", 
-                        "user_id": user_id,
-                        "intent": state.intent,
-                        "user_message": state.user_message
-                    }
+                    return ChatState(
+                        session_id=state.session_id,
+                        user_message=state.user_message,
+                        intent=state.intent,
+                        user_id=user_id,
+                        response="No spare parts found for this product."
+                    )
                 
                 result = "\n".join([f"{p.PartName}: {p.Stock} in stock, Rs.{p.Price}" for p in parts])
                 print(f"[LangGraph] Spare parts found: {result}")
-                return {
-                    "session_id": state.session_id, 
-                    "response": result, 
-                    "user_id": user_id,
-                    "intent": state.intent,
-                    "user_message": state.user_message
-                }
+                return ChatState(
+                    session_id=state.session_id,
+                    user_message=state.user_message,
+                    intent=state.intent,
+                    user_id=user_id,
+                    response=result
+                )
             else:
-                conn.close()
                 print("[LangGraph] No product ID found in message.")
-                return {
-                    "session_id": state.session_id, 
-                    "response": "Please provide a product ID (e.g., PRD001).", 
-                    "user_id": user_id,
-                    "intent": state.intent,
-                    "user_message": state.user_message
-                }
+                return ChatState(
+                    session_id=state.session_id,
+                    user_message=state.user_message,
+                    intent=state.intent,
+                    user_id=user_id,
+                    response="Please provide a product ID (e.g., PRD001)."
+                )
         else:
-            conn.close()
+            # For any other intent, pass to LLM - use special marker
             print("[LangGraph] Intent not handled by db_node, passing to LLM.")
-            return {
-                "session_id": state.session_id, 
-                "response": None,  # Return None to trigger LLM
-                "user_id": user_id,
-                "intent": state.intent,
-                "user_message": state.user_message
-            }
+            return ChatState(
+                session_id=state.session_id,
+                user_message=state.user_message,
+                intent=state.intent,
+                user_id=user_id,
+                response="__PASS_TO_LLM__"  # Special marker instead of empty string
+            )
     except Exception as e:
         print(f"[LangGraph] Database error: {e}")
-        return {
-            "session_id": state.session_id, 
-            "response": f"Database error: {e}", 
-            "user_id": user_id,
-            "intent": state.intent,
-            "user_message": state.user_message
-        }
+        return ChatState(
+            session_id=state.session_id,
+            user_message=state.user_message,
+            intent=state.intent,
+            user_id=user_id,
+            response=f"Database error: {e}"
+        )
 
-def llm_node(state: ChatState):
+def llm_node(state: ChatState) -> ChatState:
     print(f"[LangGraph] Entering llm_node with user_message: {state.user_message}")
     user_message = state.user_message
     
-    response = openai.chat.completions.create(
-        model=openai_deployment,
-        messages=[{"role": "user", "content": user_message}]
-    )
-    result = response.choices[0].message.content
-    print(f"[LangGraph] LLM response: {result}")
-    
-    return {
-        "session_id": state.session_id, 
-        "response": result, 
-        "user_id": state.user_id,
-        "intent": state.intent,
-        "user_message": state.user_message
-    }
+    try:
+        response = openai.chat.completions.create(
+            model=openai_deployment,
+            messages=[{"role": "user", "content": user_message}]
+        )
+        result = response.choices[0].message.content
+        print(f"[LangGraph] LLM response: {result}")
+        
+        return ChatState(
+            session_id=state.session_id,
+            user_message=state.user_message,
+            intent=state.intent,
+            user_id=state.user_id,
+            response=result
+        )
+    except Exception as e:
+        print(f"[LangGraph] LLM error: {e}")
+        return ChatState(
+            session_id=state.session_id,
+            user_message=state.user_message,
+            intent=state.intent,
+            user_id=state.user_id,
+            response=f"I'm sorry, I encountered an error processing your request: {e}"
+        )
 
 # --- LangGraph Workflow ---
 graph = StateGraph(ChatState)
@@ -242,7 +285,7 @@ graph.add_conditional_edges(
 # Add conditional edge from db node
 graph.add_conditional_edges(
     "db",
-    lambda state: "llm" if state.response is None else END
+    lambda state: "llm" if state.response == "__PASS_TO_LLM__" else END
 )
 
 # Add edges to END
@@ -263,21 +306,31 @@ def chat_endpoint(request: ChatRequest):
     # Generate a new session_id if not provided
     session_id = request.session_id or str(uuid.uuid4())
     # Get user_id from session store if available
-    user_id = session_store.get(session_id)
+    user_id = session_store.get(session_id, "")
     
     try:
-        result = workflow.invoke({
-            "session_id": session_id,
-            "user_message": request.user_message,
-            "user_id": user_id,
-            "response": None,
-            "intent": None
-        })
-        print(f"[LangGraph] Final response: {result['response']}")
-        return {"response": result["response"], "session_id": session_id}
+        initial_state = ChatState(
+            session_id=session_id,
+            user_message=request.user_message,
+            user_id=user_id,
+            response="",
+            intent=""
+        )
+        
+        result = workflow.invoke(initial_state)
+        print(f"[LangGraph] Final response: {result.response}")
+        return {"response": result.response, "session_id": session_id}
     except Exception as e:
         print(f"[LangGraph] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+def root():
+    return {"message": "Customer Service Chatbot API is running!"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn
