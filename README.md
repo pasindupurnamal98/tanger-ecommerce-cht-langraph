@@ -51,8 +51,7 @@ This project is built with a modern, scalable, and secure technology stack:
     *   **Azure OpenAI:** Leverages powerful models like GPT-4, GPT-4o, etc., for advanced AI capabilities.
       
 ## 🖼️ Demo Snapshot
-
-![Singer Assistant Demo](/img.png)
+![Singer Assistant Demo](img.png)
 
 *Modern, branded chat interface with quick actions and session info.*
 
