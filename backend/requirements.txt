@@ -1,0 +1,17 @@
+# Core database and environment
+pyodbc
+python-dotenv
+
+# Azure OpenAI
+openai
+
+# LangGraph and LangChain
+langgraph
+langchain
+
+# (Optional) For advanced workflows, you might want:
+tqdm
+pandas
+
+# (Optional) For Streamlit UI, if you use it in backend
+streamlit
