@@ -149,6 +149,21 @@ def llm_node(state: ChatState):
         "user_message": user_message
     }
 
+def friendly_llm_node(state: ChatState):
+    print(f"[LangGraph] Entering friendly_llm_node with db result: {state.response}")
+    prompt = f"Rephrase this for a customer in a friendly, helpful way:\n\n{state.response}"
+    response = openai.chat.completions.create(
+        model=openai_deployment,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    result = response.choices[0].message.content
+    print(f"[LangGraph] Friendly LLM response: {result}")
+    return {
+        "response": result,
+        "intent": state.intent,
+        "user_message": state.user_message
+    }
+
 # --- LangGraph Workflow ---
 graph = StateGraph(ChatState)
 graph.add_node("intent", intent_node)
@@ -157,8 +172,10 @@ graph.add_node("llm", llm_node)
 graph.add_edge("intent", "db")
 graph.add_conditional_edges(
     "db",
-    lambda state: "llm" if not state.response else END
+    lambda state: "llm" if not state.response else "friendly_llm"
 )
+graph.add_node("friendly_llm", friendly_llm_node)
+graph.add_edge("friendly_llm", END)
 graph.add_edge("llm", END)
 graph.set_entry_point("intent")
 workflow = graph.compile()
