@@ -283,7 +283,7 @@ from datetime import datetime
 # Configure the page
 st.set_page_config(
     page_title="Singer Assistant",
-    page_icon="🎵",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -808,7 +808,7 @@ with col2:
             # Add welcome message back
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": "🎵 Hello! I'm Singer Assistant, your AI-powered customer service companion. I'm here to help you with orders, spare parts, warranties, and much more! How can I assist you today?",
+                "content": "Hello! I'm Singer Assistant, your AI-powered customer service companion. I'm here to help you with orders, spare parts, warranties, and much more! How can I assist you today?",
                 "timestamp": datetime.now().strftime("%H:%M:%S")
             })
             st.success("✅ Chat cleared!")
@@ -821,7 +821,7 @@ with col2:
             st.session_state.messages = []
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": "🎵 Hello! I'm Singer Assistant, your AI-powered customer service companion. I'm here to help you with orders, spare parts, warranties, and much more! How can I assist you today?",
+                "content": "Hello! I'm Singer Assistant, your AI-powered customer service companion. I'm here to help you with orders, spare parts, warranties, and much more! How can I assist you today?",
                 "timestamp": datetime.now().strftime("%H:%M:%S")
             })
             st.success("✅ New session started!")
@@ -844,7 +844,7 @@ st.markdown(f"""
 <div style='text-align: center; color: #666; padding: 1rem;'>
     <strong>Singer Assistant v2.0</strong> - Powered by AI & LangGraph<br>
     Session: {st.session_state.session_id[:8]}... | Status: {st.session_state.connection_status.title()}<br>
-    Always here to help! 🎵
+    Always here to help! 
 </div>
 """, unsafe_allow_html=True)
 
