@@ -577,7 +577,7 @@ col1, col2 = st.columns([3, 1])
 
 with col1:
     # Header with connection status
-    st.markdown('<h1 class="main-header">🎵 Singer Assistant</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Singer Assistant</h1>', unsafe_allow_html=True)
     
     # Connection status indicator
     status_class = "status-online" if st.session_state.connection_status == "online" else "status-offline"
@@ -784,10 +784,10 @@ with col2:
     st.subheader("📞 Need Human Help?")
     st.markdown("""
     **Customer Service:**
-    - ☎️ Phone: 1-800-SINGER
+    - ☎️ Phone: +94 115 400 400
     - ✉️ Email: support@singer.com
     - 🕒 Hours: 9 AM - 6 PM (Mon-Fri)
-    - 🌐 Website: singer.com/support
+    - 🌐 Website: https://www.singersl.com/
     """)
     st.markdown('</div>', unsafe_allow_html=True)
     
