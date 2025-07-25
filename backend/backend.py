@@ -369,6 +369,14 @@ def friendly_llm_node(state: ChatState):
 def llm_node(state: ChatState):
     print(f"[LangGraph] Entering llm_node with user_message: {state.user_message}")
     user_message = state.user_message
+    system_message = {
+        "role": "system",
+        "content": (
+            "You are Singer Assistant, a helpful virtual assistant for Singer e-commerce customers. "
+            "Never mention OpenAI or that you are an AI language model. "
+            "Always answer as Singer Assistant."
+        )
+    }
     response = openai.chat.completions.create(
         model=openai_deployment,
         messages=[{"role": "user", "content": user_message}]
