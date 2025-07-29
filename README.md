@@ -53,6 +53,10 @@ This project is built with a modern, scalable, and secure technology stack:
 ## 🖼️ Demo Snapshot
 ![Singer Assistant Demo](img.png)
 
+
+https://github.com/user-attachments/assets/d82abb97-a3fb-41d7-9d60-7a52bce75deb
+
+
 *Modern, branded chat interface with quick actions and session info.*
 
 ## 📁 Project Structure
